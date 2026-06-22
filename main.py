@@ -43,7 +43,8 @@ async def get_url(id: str):
         'format': 'bestaudio[ext=m4a]/bestaudio',
         'quiet': True,
         'no_warnings': True,
-        'simulate': True
+        'simulate': True,
+        'extractor_args': {'youtube': {'player_client': ['android']}}
     }
     try:
         def fetch():

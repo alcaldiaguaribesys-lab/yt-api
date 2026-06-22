@@ -1,62 +1,54 @@
-﻿from fastapi import FastAPI, HTTPException
+﻿from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
-import asyncio
+from pytubefix import YouTube
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def read_root():
-    return {"message": "API de YouTube en la Nube activa!"}
+    return {"message": "API YouTube activa"}
 
 @app.get("/search")
-async def search_videos(q: str):
+def search(q: str):
     ydl_opts = {
         'extract_flat': True,
         'quiet': True,
         'no_warnings': True,
+        'simulate': True
     }
-    try:
-        # Ejecutamos yt_dlp de forma asincrona para no bloquear
-        def fetch():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch15:{q}", download=False)
-                
-        info = await asyncio.to_thread(fetch)
-        
-        results = []
-        if 'entries' in info:
-            for entry in info['entries']:
-                # yt-dlp puede retornar nil/None para algunos campos, sanitizamos
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(f"ytsearch15:{q}", download=False)
+            results = []
+            for entry in info.get('entries', []):
                 results.append({
-                    "id": entry.get("id", ""),
-                    "title": entry.get("title", ""),
-                    "duration": entry.get("duration", 0)
+                    "id": entry.get("id"),
+                    "title": entry.get("title"),
+                    "duration": entry.get("duration")
                 })
-                
-        return {"results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            return {"results": results}
+        except Exception as e:
+            return {"error": str(e)}
 
 @app.get("/get-url")
-async def get_url(id: str):
-    ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio',
-        'quiet': True,
-        'no_warnings': True,
-        'simulate': True,
-        'extractor_args': {'youtube': {'player_client': ['android']}}
-    }
+def get_url(id: str):
     try:
-        def fetch():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"https://www.youtube.com/watch?v={id}", download=False)
-                
-        info = await asyncio.to_thread(fetch)
-        
-        url = info.get("url", "")
-        if url:
-            return {"url": url}
+        # Usar pytubefix para extraer el enlace de audio, que evita bloqueos de bot
+        url = f"https://www.youtube.com/watch?v={id}"
+        yt = YouTube(url, use_po_token=False)
+        ys = yt.streams.get_audio_only()
+        if ys and ys.url:
+            return {"url": ys.url}
         else:
-            raise HTTPException(status_code=404, detail="No URL found")
+            return {"error": "No audio stream found"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
